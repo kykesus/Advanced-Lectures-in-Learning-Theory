@@ -6,6 +6,7 @@ from torchvision.transforms import ToTensor
 import numpy as np
 from scipy import linalg
 import matplotlib.pyplot as plt
+import random
 
 
 def simple_pca(X=None, dim=0, npca=0):
@@ -64,10 +65,67 @@ def gd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
             out = eta*hinge_loss_grad(t[ii], score[ii], x[ii, :])/n_points
             wt -= out.reshape(-1, 1)
             loss_list[epoc] += hinge_loss(t[ii], score[ii])/n_points
-        print(epoc/epochs)
+        #print(epoc/epochs)
 
     return wt, loss_list
 
+def rgd_optimizer(data, target, w_shape, initial_variance, eta ,lambda_coeff, epochs):
+
+    # Initialize weights
+    wt = np.sqrt(initial_variance)*np.random.randn(w_shape, 1)
+
+    n_points = data.shape[0]
+
+    # Initialize loss vector for each epoch
+    loss_list = np.zeros(epochs,)
+
+    x = data
+    t = target
+
+    for epoc in range(epochs):
+        score = np.dot(x, wt).squeeze()
+        loss_term = 0
+        for ii in range(n_points):
+            if ii == 0:
+                out = eta*hinge_loss_grad(t[ii], score[ii], x[ii, :])/n_points
+            else:
+                out += eta*hinge_loss_grad(t[ii], score[ii], x[ii, :])/n_points
+            loss_term += hinge_loss(t[ii], score[ii])/n_points
+        wt -= out.reshape(-1, 1) + (2 * lambda_coeff * wt)
+        loss_list[epoc] = loss_term + lambda_coeff*np.sum(wt**2)
+        
+        #print(epoc/epochs)
+
+    return wt, loss_list
+
+def test_model(model,data,target):
+    score = np.dot(data, model).squeeze() > 0
+    target = np.array(target) > 0
+    return np.sum(score == target)/len(target)
+
+def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
+    # Initialize weights
+    wt = np.sqrt(initial_variance)*np.random.randn(w_shape, 1)
+
+    n_points = data.shape[0]
+
+    # Initialize loss vector for each epoch
+    loss_list = np.zeros(epochs,)
+
+    x = data
+    t = target
+    n_idx = [i for i in range(n_points)]
+    random.shuffle(n_idx)
+
+    for epoc in range(epochs):
+        ii = n_idx[epoc]
+        score = np.dot(x[ii,:], wt).squeeze()
+        out = eta*hinge_loss_grad(t[ii], score, x[ii, :])
+        wt -= out.reshape(-1, 1)
+        loss_list[epoc] = hinge_loss(t[ii], score)
+        #print(epoc/epochs)
+
+    return wt, loss_list
 
 def is_prime(x):
     '''
@@ -125,10 +183,14 @@ def main():
 
     # Discuss and definitions for different gradients
     # Part A - Optimization
-    epochs = int(1e2)  # number of epochs to run for
+    epochs = int(1e1)  # number of epochs to run for
     eta = 3e-4  # just from trial and error not theoretic justified...
 
     # Run learning
+    '''
+    Simple GD
+    '''
+    print('Simple GD')
     print('#'*10 + 'Bigger than 5' + '#'*10)
     wt_5, loss_list_5 = gd_optimizer(data=img_combined, target=target_greater_than_5,
                                      w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs)
@@ -149,8 +211,76 @@ def main():
     ax.grid()
     ax.set_xlabel('Epochs (#)')
     ax.set_ylabel('Error (%)')
+    ax.set_title('GD')
     ax.legend(['Bigger than 5', 'Number is even', 'Number is prime'])
     fig.show()
+    GT5,EVEN,PRIME = test_model(wt_5,img_combined,target_greater_than_5) , test_model(wt_ev,img_combined,target_even) , test_model(wt_p,img_combined,target_prime)  
+    print('GD correctness: GT5: {} Even {} Prime {}'.format(GT5,EVEN,PRIME))
+
+    '''
+    Regularized GD
+    '''
+    print('Regularized GD')
+    lambda_coeff = 1e-1
+    print('#'*10 + 'Bigger than 5' + '#'*10)
+    wt_5, loss_list_5 = rgd_optimizer(data=img_combined, target=target_greater_than_5,
+                                     w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=lambda_coeff, epochs=epochs)
+
+    print('#'*10 + 'Number is even' + '#'*10)
+    wt_ev, loss_list_ev = rgd_optimizer(
+        data=img_combined, target=target_even, w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=lambda_coeff, epochs=epochs)
+
+    print('#'*10 + 'Number is prime' + '#'*10)
+    wt_p, loss_list_p = rgd_optimizer(
+        data=img_combined, target=target_prime, w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=lambda_coeff, epochs=epochs)
+
+    # Plot results
+    fig, ax = plt.subplots()
+    ax.plot(loss_list_5)
+    ax.plot(loss_list_ev)
+    ax.plot(loss_list_p)
+    ax.grid()
+    ax.set_title('RGD')
+    ax.set_xlabel('Epochs (#)')
+    ax.set_ylabel('Error (%)')
+    ax.legend(['Bigger than 5', 'Number is even', 'Number is prime'])
+    fig.show()
+    GT5,EVEN,PRIME = test_model(wt_5,img_combined,target_greater_than_5) , test_model(wt_ev,img_combined,target_even) , test_model(wt_p,img_combined,target_prime)  
+    print('RGD correctness: GT5: {} Even {} Prime {}'.format(GT5,EVEN,PRIME))
+    '''
+    SGD
+    '''
+    print('SGD')
+    eta = 1e-6
+    epochs = int(5e4)
+    print('#'*10 + 'Bigger than 5' + '#'*10)
+    wt_5, loss_list_5 = sgd_optimizer(data=img_combined, target=target_greater_than_5,
+                                     w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs)
+
+    print('#'*10 + 'Number is even' + '#'*10)
+    wt_ev, loss_list_ev = sgd_optimizer(
+        data=img_combined, target=target_even, w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs)
+
+    print('#'*10 + 'Number is prime' + '#'*10)
+    wt_p, loss_list_p = sgd_optimizer(
+        data=img_combined, target=target_prime, w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs)
+
+    # Plot results
+    fig, ax = plt.subplots()
+    ax.plot(loss_list_5)
+    ax.plot(loss_list_ev)
+    ax.plot(loss_list_p)
+    ax.grid()
+    ax.set_title('SGD')
+    ax.set_xlabel('Epochs (#)')
+    ax.set_ylabel('Error (%)')
+    ax.legend(['Bigger than 5', 'Number is even', 'Number is prime'])
+    fig.show()
+    GT5,EVEN,PRIME = test_model(wt_5,img_combined,target_greater_than_5) , test_model(wt_ev,img_combined,target_even) , test_model(wt_p,img_combined,target_prime)  
+    print('SGD correctness: GT5: {} Even {} Prime {}'.format(GT5,EVEN,PRIME))
+
+
+
 
     # Part B - Generalization
     # Use randomized train & test sets
