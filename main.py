@@ -18,9 +18,9 @@ def simple_pca(X=None, dim=0, npca=0):
         X = X.transpose()
     # Each column is different variable (pixel), and rows indicates observations (images)
     covariance_matrix = np.cov(X, rowvar=False)
-    # Decompose using eigen value decomposition
+    # Decompose using eigenvalue decomposition
     egn_val, egn_vec = linalg.eigh(covariance_matrix)
-    # Sort eigen vectors based on eigenvalues
+    # Sort eigenvectors based on eigenvalues
     sorting_indices = np.argsort(egn_val)[::-1]
     egn_vec = egn_vec[:, sorting_indices]
     egn_val = egn_val[sorting_indices]
@@ -45,6 +45,17 @@ def hinge_loss(target, score):
     return np.max([0, 1 - ty])
 
 
+def project(wt, R):
+    '''
+    Project a vector wt onto a sphere of radius R
+    '''
+    norm = np.sqrt(np.dot(wt.transpose(), wt))
+    if norm > R:
+        return wt * R / norm
+    else:
+        return wt
+
+
 def gd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
 
     # Initialize weights
@@ -65,11 +76,38 @@ def gd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
             out = eta*hinge_loss_grad(t[ii], score[ii], x[ii, :])/n_points
             wt -= out.reshape(-1, 1)
             loss_list[epoc] += hinge_loss(t[ii], score[ii])/n_points
-        #print(epoc/epochs)
+        # print(epoc/epochs)
 
     return wt, loss_list
 
-def rgd_optimizer(data, target, w_shape, initial_variance, eta ,lambda_coeff, epochs):
+
+def cgd_optimizer(data, target, w_shape, initial_variance, eta, R, epochs):
+    # Initialize weights
+    wt = np.sqrt(initial_variance)*np.random.randn(w_shape, 1)
+
+    n_points = data.shape[0]
+
+    # Initialize loss vector for each epoch
+    loss_list = np.zeros(epochs,)
+
+    x = data
+    t = target
+
+    for epoc in range(epochs):
+        score = np.dot(x, wt).squeeze()
+
+        for ii in range(n_points):
+            out = eta*hinge_loss_grad(t[ii], score[ii], x[ii, :])/n_points
+            wt -= out.reshape(-1, 1)
+            loss_list[epoc] += hinge_loss(t[ii], score[ii])/n_points
+
+        wt = project(wt, R)
+        # print(epoc/epochs)
+
+    return wt, loss_list
+
+
+def rgd_optimizer(data, target, w_shape, initial_variance, eta, lambda_coeff, epochs):
 
     # Initialize weights
     wt = np.sqrt(initial_variance)*np.random.randn(w_shape, 1)
@@ -93,15 +131,17 @@ def rgd_optimizer(data, target, w_shape, initial_variance, eta ,lambda_coeff, ep
             loss_term += hinge_loss(t[ii], score[ii])/n_points
         wt -= out.reshape(-1, 1) + (2 * lambda_coeff * wt)
         loss_list[epoc] = loss_term + lambda_coeff*np.sum(wt**2)
-        
-        #print(epoc/epochs)
+
+        # print(epoc/epochs)
 
     return wt, loss_list
 
-def test_model(model,data,target):
+
+def test_model(model, data, target):
     score = np.dot(data, model).squeeze() > 0
     target = np.array(target) > 0
     return np.sum(score == target)/len(target)
+
 
 def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
     # Initialize weights
@@ -119,13 +159,14 @@ def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
 
     for epoc in range(epochs):
         ii = n_idx[epoc]
-        score = np.dot(x[ii,:], wt).squeeze()
+        score = np.dot(x[ii, :], wt).squeeze()
         out = eta*hinge_loss_grad(t[ii], score, x[ii, :])
         wt -= out.reshape(-1, 1)
         loss_list[epoc] = hinge_loss(t[ii], score)
-        #print(epoc/epochs)
+        # print(epoc/epochs)
 
     return wt, loss_list
+
 
 def is_prime(x):
     '''
@@ -163,15 +204,6 @@ def main():
     # Apply preprocessing - we decided to use PCA
     # This preprocessing keeps the input for the next stage convex
     ###
-    if 0:
-        egn_vec, egn_val = simple_pca(img_combined, dim=0, npca=28**2)
-        fig, ax = plt.subplots()
-        ax.plot(egn_val)
-        ax.grid()
-        ax.set_xlabel('Eigenvalue index')
-        ax.set_ylabel('Score')
-        fig.show()
-
     egn_vec, egn_val = simple_pca(img_combined, dim=0, npca=100)
     img_combined = np.dot(img_combined, egn_vec)
 
@@ -210,29 +242,71 @@ def main():
     ax.plot(loss_list_p)
     ax.grid()
     ax.set_xlabel('Epochs (#)')
-    ax.set_ylabel('Error (%)')
+    ax.set_ylabel('Error')
     ax.set_title('GD')
     ax.legend(['Bigger than 5', 'Number is even', 'Number is prime'])
     fig.show()
-    GT5,EVEN,PRIME = test_model(wt_5,img_combined,target_greater_than_5) , test_model(wt_ev,img_combined,target_even) , test_model(wt_p,img_combined,target_prime)  
-    print('GD correctness: GT5: {} Even {} Prime {}'.format(GT5,EVEN,PRIME))
+    GT5, EVEN, PRIME = test_model(wt_5, img_combined, target_greater_than_5), test_model(
+        wt_ev, img_combined, target_even), test_model(wt_p, img_combined, target_prime)
+    print('GD correctness: GT5: {} Even {} Prime {}'.format(GT5, EVEN, PRIME))
+
+    '''
+    Constrained GD
+    '''
+
+    # We assume that the weights are contained in a ball with radius X
+    R = 1e-2
+
+    # The subgradient for hinge loss is bounded with L=1
+    L = 1
+
+    # Theoretical eta for error at most RL/sqrt(T)
+    eta = R / (L * np.sqrt(epochs))
+
+    print('Constrained GD')
+    print('#'*10 + 'Bigger than 5' + '#'*10)
+    wt_5, loss_list_5 = cgd_optimizer(data=img_combined, target=target_greater_than_5,
+                                      w_shape=100, initial_variance=1/100, eta=eta, R=R, epochs=epochs)
+
+    print('#'*10 + 'Number is even' + '#'*10)
+    wt_ev, loss_list_ev = cgd_optimizer(
+        data=img_combined, target=target_even, w_shape=100, initial_variance=1/100, eta=eta, R=R, epochs=epochs)
+
+    print('#'*10 + 'Number is prime' + '#'*10)
+    wt_p, loss_list_p = cgd_optimizer(
+        data=img_combined, target=target_prime, w_shape=100, initial_variance=1/100, eta=eta, R=R, epochs=epochs)
+
+    # Plot results
+    fig, ax = plt.subplots()
+    ax.plot(loss_list_5)
+    ax.plot(loss_list_ev)
+    ax.plot(loss_list_p)
+    ax.grid()
+    ax.set_xlabel('Epochs (#)')
+    ax.set_ylabel('Error')
+    ax.set_title('CGD')
+    ax.legend(['Bigger than 5', 'Number is even', 'Number is prime'])
+    fig.show()
+    GT5, EVEN, PRIME = test_model(wt_5, img_combined, target_greater_than_5), test_model(
+        wt_ev, img_combined, target_even), test_model(wt_p, img_combined, target_prime)
+    print('CGD correctness: GT5: {} Even {} Prime {}'.format(GT5, EVEN, PRIME))
 
     '''
     Regularized GD
     '''
     print('Regularized GD')
-    lambda_coeff = 1e-1
+    LAMBDA = 1 / np.sqrt(img_combined.shape[0])
     print('#'*10 + 'Bigger than 5' + '#'*10)
     wt_5, loss_list_5 = rgd_optimizer(data=img_combined, target=target_greater_than_5,
-                                     w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=lambda_coeff, epochs=epochs)
+                                      w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=LAMBDA, epochs=epochs)
 
     print('#'*10 + 'Number is even' + '#'*10)
     wt_ev, loss_list_ev = rgd_optimizer(
-        data=img_combined, target=target_even, w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=lambda_coeff, epochs=epochs)
+        data=img_combined, target=target_even, w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=LAMBDA, epochs=epochs)
 
     print('#'*10 + 'Number is prime' + '#'*10)
     wt_p, loss_list_p = rgd_optimizer(
-        data=img_combined, target=target_prime, w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=lambda_coeff, epochs=epochs)
+        data=img_combined, target=target_prime, w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=LAMBDA, epochs=epochs)
 
     # Plot results
     fig, ax = plt.subplots()
@@ -242,11 +316,12 @@ def main():
     ax.grid()
     ax.set_title('RGD')
     ax.set_xlabel('Epochs (#)')
-    ax.set_ylabel('Error (%)')
+    ax.set_ylabel('Error')
     ax.legend(['Bigger than 5', 'Number is even', 'Number is prime'])
     fig.show()
-    GT5,EVEN,PRIME = test_model(wt_5,img_combined,target_greater_than_5) , test_model(wt_ev,img_combined,target_even) , test_model(wt_p,img_combined,target_prime)  
-    print('RGD correctness: GT5: {} Even {} Prime {}'.format(GT5,EVEN,PRIME))
+    GT5, EVEN, PRIME = test_model(wt_5, img_combined, target_greater_than_5), test_model(
+        wt_ev, img_combined, target_even), test_model(wt_p, img_combined, target_prime)
+    print('RGD correctness: GT5: {} Even {} Prime {}'.format(GT5, EVEN, PRIME))
     '''
     SGD
     '''
@@ -255,7 +330,7 @@ def main():
     epochs = int(5e4)
     print('#'*10 + 'Bigger than 5' + '#'*10)
     wt_5, loss_list_5 = sgd_optimizer(data=img_combined, target=target_greater_than_5,
-                                     w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs)
+                                      w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs)
 
     print('#'*10 + 'Number is even' + '#'*10)
     wt_ev, loss_list_ev = sgd_optimizer(
@@ -273,14 +348,12 @@ def main():
     ax.grid()
     ax.set_title('SGD')
     ax.set_xlabel('Epochs (#)')
-    ax.set_ylabel('Error (%)')
+    ax.set_ylabel('Error')
     ax.legend(['Bigger than 5', 'Number is even', 'Number is prime'])
     fig.show()
-    GT5,EVEN,PRIME = test_model(wt_5,img_combined,target_greater_than_5) , test_model(wt_ev,img_combined,target_even) , test_model(wt_p,img_combined,target_prime)  
-    print('SGD correctness: GT5: {} Even {} Prime {}'.format(GT5,EVEN,PRIME))
-
-
-
+    GT5, EVEN, PRIME = test_model(wt_5, img_combined, target_greater_than_5), test_model(
+        wt_ev, img_combined, target_even), test_model(wt_p, img_combined, target_prime)
+    print('SGD correctness: GT5: {} Even {} Prime {}'.format(GT5, EVEN, PRIME))
 
     # Part B - Generalization
     # Use randomized train & test sets
