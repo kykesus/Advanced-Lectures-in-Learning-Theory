@@ -467,7 +467,7 @@ def main():
     theo_wt_ev_sgd, loss_list_ev_sgd = sgd_optimizer(
         data=img_combined, target=target_even, w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs)
 
-    print('#'*10 + ' Number is prime' + '#'*10)
+    print('#'*10 + ' Number is prime ' + '#'*10)
     theo_wt_p_sgd, loss_list_p_sgd = sgd_optimizer(
         data=img_combined, target=target_prime, w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs)
 
