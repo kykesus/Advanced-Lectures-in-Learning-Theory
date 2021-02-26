@@ -8,6 +8,8 @@ from scipy import linalg
 import matplotlib.pyplot as plt
 import random
 
+def list_reduction(a,b):
+    return list(set(a)-set(b))
 
 def simple_pca(X=None, dim=0, npca=0):
     if X is None:
@@ -53,40 +55,49 @@ def project(wt, R):
         return wt
 
 
-def gd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
+def gd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_data = None, test_target=None):
 
     # Initialize weights
     wt = np.sqrt(initial_variance)*np.random.randn(w_shape, 1)
 
     n_points = data.shape[0]
 
+    test_flag = np.all(test_data != None)
     # Initialize loss vector for each epoch
-    loss_list = np.zeros(epochs,)
-
+    if test_flag:
+        loss_list = np.zeros([epochs,3])
+    else:
+        loss_list = np.zeros([epochs,1])
     x = data
     t = target
 
     for epoc in range(epochs):
         score = np.dot(x, wt).squeeze()
-
         for ii in range(n_points):
             ty = t[ii] * score[ii]
             out = eta*hinge_loss_grad(t[ii], ty, x[ii, :])/n_points
             wt -= out.reshape(-1, 1)
-            loss_list[epoc] += hinge_loss(ty)/n_points
-        # print(epoc/epochs)
-
+            loss_list[epoc,0] += hinge_loss(ty)/n_points
+        if test_flag:
+            h_loss,zone_loss = test_model(wt, test_data, test_target)
+            loss_list[epoc,1] = h_loss
+            loss_list[epoc,2] = zone_loss
     return wt, loss_list
 
 
-def cgd_optimizer(data, target, w_shape, initial_variance, eta, R, epochs):
+
+def cgd_optimizer(data, target, w_shape, initial_variance, eta, R, epochs, test_data = None, test_target=None):
     # Initialize weights
     wt = np.sqrt(initial_variance)*np.random.randn(w_shape, 1)
 
     n_points = data.shape[0]
 
+    test_flag = np.all(test_data != None)
     # Initialize loss vector for each epoch
-    loss_list = np.zeros(epochs,)
+    if test_flag:
+        loss_list = np.zeros([epochs,3])
+    else:
+        loss_list = np.zeros([epochs,1])
 
     x = data
     t = target
@@ -98,23 +109,31 @@ def cgd_optimizer(data, target, w_shape, initial_variance, eta, R, epochs):
             ty = t[ii] * score[ii]
             out = eta*hinge_loss_grad(t[ii], ty, x[ii, :])/n_points
             wt -= out.reshape(-1, 1)
-            loss_list[epoc] += hinge_loss(ty)/n_points
+            loss_list[epoc,0] += hinge_loss(ty)/n_points
 
         wt = project(wt, R)
+        if test_flag:
+            h_loss,zone_loss = test_model(wt, test_data, test_target)
+            loss_list[epoc,1] = h_loss
+            loss_list[epoc,2] = zone_loss
         # print(epoc/epochs)
 
     return wt, loss_list
 
 
-def rgd_optimizer(data, target, w_shape, initial_variance, eta, lambda_coeff, epochs):
+def rgd_optimizer(data, target, w_shape, initial_variance, eta, lambda_coeff, epochs, test_data = None, test_target=None):
 
     # Initialize weights
     wt = np.sqrt(initial_variance)*np.random.randn(w_shape, 1)
 
     n_points = data.shape[0]
 
+    test_flag = np.all(test_data != None)
     # Initialize loss vector for each epoch
-    loss_list = np.zeros(epochs,)
+    if test_flag:
+        loss_list = np.zeros([epochs,3])
+    else:
+        loss_list = np.zeros([epochs,1])
 
     x = data
     t = target
@@ -130,8 +149,11 @@ def rgd_optimizer(data, target, w_shape, initial_variance, eta, lambda_coeff, ep
                 out += eta*hinge_loss_grad(t[ii], ty, x[ii, :])/n_points
             loss_term += hinge_loss(ty)/n_points
         wt -= out.reshape(-1, 1) + (2 * lambda_coeff * wt)
-        loss_list[epoc] = loss_term + lambda_coeff*np.sum(wt**2)
-
+        loss_list[epoc,0] = loss_term + lambda_coeff*np.sum(wt**2)
+        if test_flag:
+            h_loss,zone_loss = test_model(wt, test_data, test_target)
+            loss_list[epoc,1] = h_loss
+            loss_list[epoc,2] = zone_loss
         # print(epoc/epochs)
 
     return wt, loss_list
@@ -140,17 +162,26 @@ def rgd_optimizer(data, target, w_shape, initial_variance, eta, lambda_coeff, ep
 def test_model(model, data, target):
     score = np.dot(data, model).squeeze() > 0
     target = np.array(target) > 0
-    return np.sum(score == target)/len(target)
+    n_points = data.shape[0]
+    loss_hinge = 0
+    for ii in range(n_points):
+            ty = target[ii] * score[ii]
+            loss_hinge += hinge_loss(ty)/n_points
+    return loss_hinge,np.sum(score == target)/len(target)
 
 
-def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
+def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_data=None, test_target=None):
     # Initialize weights
     wt = np.sqrt(initial_variance)*np.random.randn(w_shape, 1)
 
     n_points = data.shape[0]
 
+    test_flag = np.all(test_data != None)
     # Initialize loss vector for each epoch
-    loss_list = np.zeros(epochs,)
+    if test_flag:
+        loss_list = np.zeros([epochs,3])
+    else:
+        loss_list = np.zeros([epochs,1])
 
     x = data
     t = target
@@ -163,9 +194,12 @@ def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs):
         ty = t[ii] * score
         out = eta*hinge_loss_grad(t[ii], ty, x[ii, :])
         wt -= out.reshape(-1, 1)
-        loss_list[epoc] = hinge_loss(ty)
+        loss_list[epoc,0] = hinge_loss(ty)
         # print(epoc/epochs)
-
+        if test_flag:
+            h_loss,zone_loss = test_model(wt, test_data, test_target)
+            loss_list[epoc,1] = h_loss
+            loss_list[epoc,2] = zone_loss
     return wt, loss_list
 
 
@@ -434,7 +468,7 @@ def main():
     fig.show()
     GT5, EVEN, PRIME = test_model(theo_wt_5_sgd, img_combined, target_greater_than_5), test_model(
         theo_wt_ev_sgd, img_combined, target_even), test_model(theo_wt_p_sgd, img_combined, target_prime)
-    print('SGD correctness: GT5: {} Even {} Prime {}'.format(GT5, EVEN, PRIME))
+    print('SGD correctness (loss,zero-one): GT5: {} Even {} Prime {}'.format(GT5, EVEN, PRIME))
 
    # Try other parameters values for gt5 problem
     best_loss_sgd = 1e6
@@ -465,7 +499,35 @@ def main():
     ############################################################################
     # Part B - Generalization
     # Use randomized train & test sets
-
+    indicies = [i for i in range(img_combined.shape[0])]
+    train_test_factor = 0.85
+    target_greater_than_5 = np.array(target_greater_than_5)
+    train_idx = np.random.choice(indicies,int(train_test_factor*img_combined.shape[0])).astype(int)
+    test_idx = list_reduction(indicies,train_idx.tolist())
+    # split to test-train
+    train_data = img_combined[train_idx,:]
+    target_greater_than_5_train = target_greater_than_5[train_idx]
+    test_data = img_combined[test_idx,:]
+    target_greater_than_5_test = target_greater_than_5[test_idx]
+    print('SGD')
+    eta = 1e-6
+    epochs = train_data.shape[0]
+    print('#'*10 + ' Bigger than 5 ' + '#'*10)
+    theo_wt_5_sgd, loss_list_5_sgd = sgd_optimizer(data=train_data, target=target_greater_than_5_train,
+                                                   w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs, test_data=test_data,
+                                                    test_target=target_greater_than_5_test)
+    train_loss = loss_list_5_sgd[:,0]
+    test_loss = loss_list_5_sgd[:,1]
+    zero_one_loss = loss_list_5_sgd[:,2]
+    fig,ax = plt.subplots()
+    ax.plot(train_loss)
+    ax.plot(test_loss)
+    ax.plot(zero_one_loss)
+    ax.legend(['train loss','test loss','0-1 loss'])
+    ax.grid()
+    ax.set_xlabel('epochs')
+    ax.set_ylabel('loss')
+    fig.show()
     input("Press any key to continue")
 
 
