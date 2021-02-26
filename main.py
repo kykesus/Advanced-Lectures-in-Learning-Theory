@@ -158,16 +158,19 @@ def rgd_optimizer(data, target, w_shape, initial_variance, eta, lambda_coeff, ep
 
     return wt, loss_list
 
-
+def hinge_loss_vec(ty):
+    tylen = ty.shape[0]
+    res = 1-ty
+    mat = np.concatenate((np.zeros([tylen,1]),res.reshape(-1,1)),axis=1)
+    r = np.max(mat,1)
+    return r
+    
 def test_model(model, data, target):
-    score = np.dot(data, model).squeeze() > 0
-    target = np.array(target) > 0
+    score = np.dot(data, model).squeeze()
     n_points = data.shape[0]
-    loss_hinge = 0
-    for ii in range(n_points):
-            ty = target[ii] * score[ii]
-            loss_hinge += hinge_loss(ty)/n_points
-    return loss_hinge,np.sum(score == target)/len(target)
+    loss_hinge = np.sum(hinge_loss_vec(target*score))/n_points
+    pd = target == ((score>0)*2-1)
+    return loss_hinge,1 - np.sum(pd)/len(target)
 
 
 def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_data=None, test_target=None):
@@ -468,7 +471,7 @@ def main():
     fig.show()
     GT5, EVEN, PRIME = test_model(theo_wt_5_sgd, img_combined, target_greater_than_5), test_model(
         theo_wt_ev_sgd, img_combined, target_even), test_model(theo_wt_p_sgd, img_combined, target_prime)
-    print('SGD correctness (loss,zero-one): GT5: {} Even {} Prime {}'.format(GT5, EVEN, PRIME))
+    print('SGD correctness (loss,zero-one loss): GT5: {} Even {} Prime {}'.format(GT5, EVEN, PRIME))
 
    # Try other parameters values for gt5 problem
     best_loss_sgd = 1e6
@@ -522,10 +525,16 @@ def main():
     fig,ax = plt.subplots()
     ax.plot(train_loss)
     ax.plot(test_loss)
-    ax.plot(zero_one_loss)
-    ax.legend(['train loss','test loss','0-1 loss'])
+    ax.legend(['train loss','test loss'])
     ax.grid()
     ax.set_xlabel('epochs')
+    ax.set_ylabel('loss')
+    fig.show()
+    fig,ax = plt.subplots()
+    ax.plot(zero_one_loss)
+    ax.grid()
+    ax.set_xlabel('epochs')
+    ax.legend(['zero-one loss'])
     ax.set_ylabel('loss')
     fig.show()
     input("Press any key to continue")
