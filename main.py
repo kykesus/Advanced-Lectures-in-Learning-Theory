@@ -85,9 +85,9 @@ def gd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_data
     for epoc in range(epochs):
         score = np.dot(x, wt).squeeze()
         ty = t*score
-        out = (np.sum(hinge_loss_grad_vec(t, ty, x), 1)).reshape(-1, 1)
+        out = (np.sum(log_loss_deriv(t, ty, x), 1)).reshape(-1, 1)
         wt -= eta*out/n_points
-        loss_list[epoc, 0] = np.sum(hinge_loss_vec(ty))/n_points
+        loss_list[epoc, 0] = np.sum(log_loss(t,score))/n_points
         if test_flag:
             h_loss, zone_loss = test_model(wt, test_data, test_target)
             loss_list[epoc, 1] = h_loss
@@ -115,9 +115,9 @@ def cgd_optimizer(data, target, w_shape, initial_variance, eta, R, epochs, test_
     for epoc in range(epochs):
         score = np.dot(x, wt).squeeze()
         ty = t*score
-        out = (np.sum(hinge_loss_grad_vec(t, ty, x), 1)).reshape(-1, 1)
+        out = (np.sum(log_loss_deriv(t, ty, x), 1)).reshape(-1, 1)
         wt -= eta*out/n_points
-        loss_list[epoc, 0] = np.sum(hinge_loss_vec(ty))/n_points
+        loss_list[epoc, 0] = np.sum(log_loss(t,score))/n_points
         wt = project(wt, R)
         if test_flag:
             h_loss, zone_loss = test_model(wt, test_data, test_target)
@@ -148,11 +148,11 @@ def rgd_optimizer(data, target, w_shape, initial_variance, eta, lambda_coeff, ep
     for epoc in range(epochs):
         score = np.dot(x, wt).squeeze()
         ty = t*score
-        out = (np.sum(hinge_loss_grad_vec(t, ty, x), 1)).reshape(-1, 1)
+        out = (np.sum(log_loss_deriv(t, ty, x), 1)).reshape(-1, 1)
         out = eta*out/n_points
         wt -= out.reshape(-1, 1) + (2 * lambda_coeff * wt)
-        loss_list[epoc, 0] = np.sum(hinge_loss_vec(
-            ty))/n_points + lambda_coeff*np.sum(wt**2)
+        loss_list[epoc, 0] = np.sum(log_loss(
+            target,score))/n_points + lambda_coeff*np.sum(wt**2)
         if test_flag:
             h_loss, zone_loss = test_model(wt, test_data, test_target)
             loss_list[epoc, 1] = h_loss
@@ -172,9 +172,9 @@ def hinge_loss_vec(ty):
 def test_model(model, data, target):
     score = np.dot(data, model).squeeze()
     n_points = data.shape[0]
-    loss_hinge = np.sum(hinge_loss_vec(target*score))/n_points
-    pd = (target == np.sign(score))
-    return loss_hinge, 1 - np.sum(pd)/len(target)
+    loss_h = np.sum(log_loss(target,score))/n_points
+    pd = (target*score) < 0
+    return loss_h, np.sum(pd)/len(target)
 
 
 def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_data=None, test_target=None):
@@ -200,15 +200,29 @@ def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_dat
         ii = n_idx[epoc]
         score = np.dot(x[ii, :], wt).squeeze()
         ty = t[ii] * score
-        out = eta*hinge_loss_grad(t[ii], ty, x[ii, :])
+        out = eta*log_loss_deriv(t[ii], ty, x[ii, :])/(epoc+1)
         wt -= out.reshape(-1, 1)
-        loss_list[epoc, 0] = hinge_loss(ty)
+        loss_list[epoc, 0] = log_loss(t[ii],score)
         if test_flag:
             h_loss, zone_loss = test_model(wt, test_data, test_target)
             loss_list[epoc, 1] = h_loss
             loss_list[epoc, 2] = zone_loss
     return wt, loss_list
 
+def sigmoid(x):
+    return 1/(1+np.exp(-x))
+
+def log_loss_deriv(y,score,x):
+    out = y - sigmoid(score)
+    return -x.transpose()*out
+
+def clap_log(x):
+    return np.clip(np.log(x+1e-10),-100,10)
+
+def log_loss(y,score):
+    score = np.array(score)
+    y = np.array(y)
+    return -(y*clap_log(sigmoid(score)+1e-6)+(1-y)*clap_log(1e-6+sigmoid(-score)))
 
 def is_prime(x):
     '''
@@ -261,7 +275,7 @@ def main():
     # ############################################################################
 
     epochs = int(1e2)  # number of epochs to run for
-    eta = 3e-4  # just from trial and error not theoretic justified...
+    eta = 4e-4  # 
 
     print('Simple GD')
     print('#'*10 + ' Bigger than 5 ' + '#'*10)
@@ -324,13 +338,10 @@ def main():
     ############################################################################
 
     # We assume that the weights are contained in a ball with radius X
-    R = 1e-2
+    R = 4e-3
 
-    # The subgradient for hinge loss is bounded with L=1
-    L = 1
-
-    # Theoretical eta for error at most RL/sqrt(T)
-    eta = R / (L * np.sqrt(epochs))
+    # Theoretical eta for error at 4/lambda_max
+    eta = 4 / (100**2)
 
     print('Constrained GD')
     print('#'*10 + ' Bigger than 5 ' + '#'*10)
@@ -359,7 +370,7 @@ def main():
     fig.show()
     GT5, EVEN, PRIME = test_model(theo_wt_5_cgd, img_combined, target_greater_than_5), test_model(
         theo_wt_ev_cgd, img_combined, target_even), test_model(theo_wt_p_cgd, img_combined, target_prime)
-    print('CGD results (hinge loss, binary loss):\nGT5: {}\nEven {}\nPrime {}'.format(
+    print('CGD results (log loss, binary loss):\nGT5: {}\nEven {}\nPrime {}'.format(
         GT5, EVEN, PRIME))
 
     # Try other parameters values for gt5 problem
@@ -421,7 +432,7 @@ def main():
     fig.show()
     GT5, EVEN, PRIME = test_model(theo_wt_5_rgd, img_combined, target_greater_than_5), test_model(
         theo_wt_ev_rgd, img_combined, target_even), test_model(theo_wt_p_rgd, img_combined, target_prime)
-    print('RGD results (hinge loss, binary loss):\nGT5: {}\nEven {}\nPrime {}'.format(
+    print('RGD results (log loss, binary loss):\nGT5: {}\nEven {}\nPrime {}'.format(
         GT5, EVEN, PRIME))
 
     # Try other parameters values for gt5 problem
@@ -484,7 +495,7 @@ def main():
     fig.show()
     GT5, EVEN, PRIME = test_model(theo_wt_5_sgd, img_combined, target_greater_than_5), test_model(
         theo_wt_ev_sgd, img_combined, target_even), test_model(theo_wt_p_sgd, img_combined, target_prime)
-    print('SGD results (hinge loss, binary loss):\nGT5: {}\nEven {}\nPrime {}'.format(
+    print('SGD results (log loss, binary loss):\nGT5: {}\nEven {}\nPrime {}'.format(
         GT5, EVEN, PRIME))
 
     # Try other parameters values for gt5 problem
@@ -517,7 +528,7 @@ def main():
     ############################################################################
     # Part B - Generalization
     ###########################################################################
-
+    print('Part B')
     # Use randomized train & test sets
     indices = [i for i in range(img_combined.shape[0])]
     train_test_factor = 0.85
