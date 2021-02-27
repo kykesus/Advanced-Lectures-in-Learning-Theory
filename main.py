@@ -200,7 +200,7 @@ def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_dat
         ii = n_idx[epoc]
         score = np.dot(x[ii, :], wt).squeeze()
         ty = t[ii] * score
-        out = eta*log_loss_deriv(t[ii], ty, x[ii, :])/(epoc+1)
+        out = eta*log_loss_deriv(t[ii], ty, x[ii, :])
         wt -= out.reshape(-1, 1)
         loss_list[epoc, 0] = log_loss(t[ii],score)
         if test_flag:
