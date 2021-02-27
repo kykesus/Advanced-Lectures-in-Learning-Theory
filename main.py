@@ -200,13 +200,15 @@ def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_dat
         ii = n_idx[epoc]
         score = np.dot(x[ii, :], wt).squeeze()
         ty = t[ii] * score
-        out = eta*log_loss_deriv(t[ii], ty, x[ii, :])
+        out = eta*log_loss_deriv(t[ii], ty, x[ii, :])/(epoc+1)
         wt -= out.reshape(-1, 1)
         loss_list[epoc, 0] = log_loss(t[ii],score)
         if test_flag:
             h_loss, zone_loss = test_model(wt, test_data, test_target)
             loss_list[epoc, 1] = h_loss
             loss_list[epoc, 2] = zone_loss
+    loss_list = ((np.cumsum(loss_list,axis=0)).transpose()/(np.linspace(1,epochs,epochs)))
+    loss_list = loss_list[:,1:]
     return wt, loss_list
 
 def sigmoid(x):
@@ -228,7 +230,7 @@ def is_prime(x):
     '''
     Map labels to 1/-1 values depending if label is prime
     '''
-    new_lbl = [1 if lbl in [2, 3, 5, 7] else -1 for lbl in x]
+    new_lbl = [1 if lbl in [2, 3, 5, 7] else 0 for lbl in x]
     return np.array(new_lbl)
 
 
@@ -264,8 +266,8 @@ def main():
 
     # Define the binary classification problems
     # We create 3 sets of labels with value +1/-1 for the binary classification with hinge loss.
-    target_greater_than_5 = [1 if (lbl >= 5) else -1 for lbl in lbl_combined]
-    target_even = [1 if (lbl % 2 == 0) else -1 for lbl in lbl_combined]
+    target_greater_than_5 = [1 if (lbl >= 5) else 0 for lbl in lbl_combined]
+    target_even = [1 if (lbl % 2 == 0) else 0 for lbl in lbl_combined]
     target_prime = is_prime(lbl_combined)
 
     # Part A - Optimization
@@ -338,7 +340,7 @@ def main():
     ############################################################################
 
     # We assume that the weights are contained in a ball with radius X
-    R = 4e-3
+    R = 1e-2
 
     # Theoretical eta for error at 4/lambda_max
     eta = 4 / (100**2)
@@ -466,7 +468,7 @@ def main():
     ############################################################################
     # SGD
     ############################################################################
-    eta = 1e-6
+    eta = 1e-2
     epochs = int(5e4)
 
     print('SGD')
@@ -544,7 +546,7 @@ def main():
     target_greater_than_5_test = target_greater_than_5[test_idx]
 
     print('SGD')
-    eta = 1e-6
+    eta = 1e-2
     epochs = len(train_idx)
     print('#'*10 + ' Bigger than 5 ' + '#'*10)
     theo_wt_5_sgd, loss_list_5_sgd = sgd_optimizer(data=train_data, target=target_greater_than_5_train,
