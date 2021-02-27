@@ -340,7 +340,7 @@ def main():
     ############################################################################
 
     # We assume that the weights are contained in a ball with radius X
-    R = 1e-1
+    R = 1e-2
 
     # Theoretical eta for error at 4/lambda_max
     eta = 4 / (100**2)
@@ -358,7 +358,6 @@ def main():
     theo_wt_p_cgd, loss_list_p_cgd = cgd_optimizer(
         data=img_combined, target=target_prime, w_shape=100, initial_variance=1/100, eta=eta, R=R, epochs=epochs)
 
-    fig.show()
     # Plot results
     fig, ax = plt.subplots()
     ax.plot(loss_list_5_cgd.squeeze())
