@@ -200,7 +200,7 @@ def sgd_optimizer(data, target, w_shape, initial_variance, eta, epochs, test_dat
         ii = n_idx[epoc]
         score = np.dot(x[ii, :], wt).squeeze()
         ty = t[ii] * score
-        out = eta*log_loss_deriv(t[ii], ty, x[ii, :])/(epoc+1)
+        out = eta*log_loss_deriv(t[ii], ty, x[ii, :])/np.sqrt(epoc+1)
         wt -= out.reshape(-1, 1)
         loss_list[epoc, 0] = log_loss(t[ii],score)
         if test_flag:
@@ -294,9 +294,9 @@ def main():
 
     # # Plot all binary problems with theoretical parameters
     fig, ax = plt.subplots()
-    ax.plot(loss_list_5_gd)
-    ax.plot(loss_list_ev_gd)
-    ax.plot(loss_list_p_gd)
+    ax.plot(loss_list_5_gd.squeeze())
+    ax.plot(loss_list_ev_gd.squeeze())
+    ax.plot(loss_list_p_gd.squeeze())
     ax.grid()
     ax.set_xlabel('Epochs (#)')
     ax.set_ylabel('Error')
@@ -320,9 +320,9 @@ def main():
         min_epoch = np.argmin(proposed_loss_list_5)
         if (current_best := proposed_loss_list_5[min_epoch]) < best_loss_gd:
             best_loss_gd = current_best
-            best_wts_gd = proposed_wt_5[min_epoch]
+            best_wts_gd = proposed_wt_5
             best_factor_gd = (1 + (x / 100))
-        ax.plot(proposed_loss_list_5)
+        ax.plot(proposed_loss_list_5.squeeze())
 
     ax.grid()
     ax.set_xlabel('Epochs (#)')
@@ -340,7 +340,7 @@ def main():
     ############################################################################
 
     # We assume that the weights are contained in a ball with radius X
-    R = 1e-2
+    R = 1e-1
 
     # Theoretical eta for error at 4/lambda_max
     eta = 4 / (100**2)
@@ -361,9 +361,9 @@ def main():
     fig.show()
     # Plot results
     fig, ax = plt.subplots()
-    ax.plot(loss_list_5_cgd)
-    ax.plot(loss_list_ev_cgd)
-    ax.plot(loss_list_p_cgd)
+    ax.plot(loss_list_5_cgd.squeeze())
+    ax.plot(loss_list_ev_cgd.squeeze())
+    ax.plot(loss_list_p_cgd.squeeze())
     ax.grid()
     ax.set_xlabel('Epochs (#)')
     ax.set_ylabel('Error')
@@ -388,9 +388,9 @@ def main():
         min_epoch = np.argmin(proposed_loss_list_5)
         if (current_best := proposed_loss_list_5[min_epoch]) < best_loss_cgd:
             best_loss_cgd = current_best
-            best_wts_cgd = proposed_wt_5[min_epoch]
+            best_wts_cgd = proposed_wt_5
             best_factor_cgd = (1 + (x / 100))
-        ax.plot(proposed_loss_list_5)
+        ax.plot(proposed_loss_list_5.squeeze())
 
     ax.grid()
     ax.set_xlabel('Epochs (#)')
@@ -423,9 +423,9 @@ def main():
 
     # Plot results
     fig, ax = plt.subplots()
-    ax.plot(loss_list_5_rgd)
-    ax.plot(loss_list_ev_rgd)
-    ax.plot(loss_list_p_rgd)
+    ax.plot(loss_list_5_rgd.squeeze())
+    ax.plot(loss_list_ev_rgd.squeeze())
+    ax.plot(loss_list_p_rgd.squeeze())
     ax.grid()
     ax.set_title('RGD')
     ax.set_xlabel('Epochs (#)')
@@ -450,9 +450,9 @@ def main():
         min_epoch = np.argmin(proposed_loss_list_5)
         if (current_best := proposed_loss_list_5[min_epoch]) < best_loss_rgd:
             best_loss_rgd = current_best
-            best_wts_rgd = proposed_wt_5[min_epoch]
+            best_wts_rgd = proposed_wt_5
             best_factor_rgd = (1 + (x / 100))
-        ax.plot(proposed_loss_list_5)
+        ax.plot(proposed_loss_list_5.squeeze())
 
     ax.grid()
     ax.set_xlabel('Epochs (#)')
@@ -486,9 +486,9 @@ def main():
 
     # Plot results
     fig, ax = plt.subplots()
-    ax.plot(loss_list_5_sgd)
-    ax.plot(loss_list_ev_sgd)
-    ax.plot(loss_list_p_sgd)
+    ax.plot(loss_list_5_sgd.squeeze()[1:])
+    ax.plot(loss_list_ev_sgd.squeeze()[1:])
+    ax.plot(loss_list_p_sgd.squeeze()[1:])
     ax.grid()
     ax.set_title('SGD')
     ax.set_xlabel('Epochs (#)')
@@ -510,11 +510,11 @@ def main():
         proposed_wt_5, proposed_loss_list_5 = sgd_optimizer(
             data=img_combined, target=target_greater_than_5, w_shape=100, initial_variance=1/100, eta=proposed_eta, epochs=epochs)
         min_epoch = np.argmin(proposed_loss_list_5)
-        if (current_best := proposed_loss_list_5[min_epoch]) < best_loss_sgd:
+        if (current_best := proposed_loss_list_5[0,min_epoch]) < best_loss_sgd:
             best_loss_sgd = current_best
-            best_wts_sgd = proposed_wt_5[min_epoch]
+            best_wts_sgd = proposed_wt_5
             best_factor_sgd = (1 + (x / 100))
-        ax.plot(proposed_loss_list_5)
+        ax.plot(proposed_loss_list_5.squeeze())
 
     ax.grid()
     ax.set_xlabel('Epochs (#)')
@@ -547,29 +547,55 @@ def main():
 
     print('SGD')
     eta = 1e-2
-    epochs = len(train_idx)
+    epochs = 50000
     print('#'*10 + ' Bigger than 5 ' + '#'*10)
     theo_wt_5_sgd, loss_list_5_sgd = sgd_optimizer(data=train_data, target=target_greater_than_5_train,
                                                    w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs, test_data=test_data,
                                                    test_target=target_greater_than_5_test)
-    train_loss = loss_list_5_sgd[:, 0]
-    test_loss = loss_list_5_sgd[:, 1]
-    zero_one_loss = loss_list_5_sgd[:, 2]
+    eta = 4e-4
+    epochs = 100
+    theo_wt_5_rgd, loss_list_5_rgd = rgd_optimizer(
+        data=img_combined, target=target_greater_than_5, w_shape=100, initial_variance=1/100, eta=eta, lambda_coeff=LAMBDA, epochs=epochs, test_data=test_data,
+                                                   test_target=target_greater_than_5_test)
+    theo_wt_5_cgd, loss_list_5_cgd = cgd_optimizer(
+        data=img_combined, target=target_greater_than_5, w_shape=100, initial_variance=1/100, eta=eta, R=R, epochs=epochs, test_data=test_data,
+                                                   test_target=target_greater_than_5_test)
+    theo_wt_5_gd, loss_list_5_gd = gd_optimizer(
+        data=img_combined, target=target_greater_than_5, w_shape=100, initial_variance=1/100, eta=eta, epochs=epochs, test_data=test_data,
+                                                   test_target=target_greater_than_5_test)
+    
+    #test_loss_sgd = loss_list_5_sgd[:, 1]
+    test_loss_rgd = loss_list_5_rgd[:, 1]
+    test_loss_cgd = loss_list_5_cgd[:, 1]
+    test_loss_gd = loss_list_5_gd[:, 1]
+    #zero_one_loss_sgd = loss_list_5_sgd[:, 2]
+    zero_one_loss_rgd = loss_list_5_rgd[:, 2]
+    zero_one_loss_cgd = loss_list_5_cgd[:, 2]
+    zero_one_loss_gd = loss_list_5_gd[:, 2]
     fig, ax = plt.subplots()
-    ax.plot(train_loss)
-    ax.plot(test_loss)
-    ax.legend(['train loss', 'test loss'])
+    #ax.plot(test_loss_sgd)
+    ax.plot(test_loss_rgd)
+    ax.plot(test_loss_cgd)
+    ax.plot(test_loss_gd)
+    ax.legend(['rgd','cgd','gd'])
     ax.grid()
     ax.set_xlabel('epochs')
     ax.set_ylabel('loss')
     fig.show()
     fig, ax = plt.subplots()
-    ax.plot(zero_one_loss)
+    #ax.plot(zero_one_loss_sgd)
+    ax.plot(zero_one_loss_rgd)
+    ax.plot(zero_one_loss_cgd)
+    ax.plot(zero_one_loss_gd)
+    ax.legend(['rgd','cgd','gd'])
     ax.grid()
     ax.set_xlabel('epochs')
-    ax.legend(['zero-one loss'])
-    ax.set_ylabel('loss')
+    ax.set_ylabel('zero-one loss')
     fig.show()
+
+
+
+
     input("Press any key to continue")
 
 
