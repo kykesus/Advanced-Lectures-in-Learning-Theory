@@ -256,13 +256,13 @@ def main():
     img_combined = img_combined.numpy()
     lbl_combined = lbl_combined.numpy()
     img_combined = img_combined.reshape(img_combined.shape[0], 28**2)
-    img_combined = img_combined.astype(float)
+    img_combined_orig = img_combined.astype(float)
 
     # Apply preprocessing - we decided to use PCA
     # This preprocessing keeps the input for the next stage convex
     ###
-    egn_vec, egn_val = simple_pca(img_combined, dim=0, npca=100)
-    img_combined = np.dot(img_combined, egn_vec)
+    egn_vec, egn_val = simple_pca(img_combined_orig, dim=0, npca=100)
+    img_combined = np.dot(img_combined_orig, egn_vec)
 
     # Define the binary classification problems
     # We create 3 sets of labels with value +1/-1 for the binary classification with hinge loss.
@@ -531,19 +531,21 @@ def main():
     ###########################################################################
     print('Part B')
     # Use randomized train & test sets
-    indices = [i for i in range(img_combined.shape[0])]
+    indices = [i for i in range(img_combined_orig.shape[0])]
     train_test_factor = 0.85
     target_greater_than_5 = np.array(target_greater_than_5)
     train_idx = np.random.choice(indices, int(
-        train_test_factor*img_combined.shape[0])).astype(int)
+        train_test_factor*img_combined_orig.shape[0])).astype(int)
     test_idx = list_reduction(indices, train_idx.tolist())
 
     # split to test-train
-    train_data = img_combined[train_idx, :]
+    train_data = img_combined_orig[train_idx, :]
     target_greater_than_5_train = target_greater_than_5[train_idx]
-    test_data = img_combined[test_idx, :]
+    test_data = img_combined_orig[test_idx, :]
     target_greater_than_5_test = target_greater_than_5[test_idx]
-
+    egn_vec, egn_val = simple_pca(train_data, dim=0, npca=100)
+    train_data = np.dot(train_data, egn_vec)
+    test_data = np.dot(test_data, egn_vec)
     print('SGD')
     eta = 1e-2
     epochs = 50000
